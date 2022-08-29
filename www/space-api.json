@@ -1,0 +1,38 @@
+{
+  "api": "0.13",
+  "space": "shackspace - stuttgart hackerspace",
+  "logo": "https://rescue.shackspace.de/images/logo_shack_brightbg_highres.png",
+  "url": "https://shackspace.de",
+  "icon": {
+    "open": "https://shackspace.de/sopen/img/png",
+    "closed": "https://shackspace.de/sopen/img/png"
+  },
+  "location": {
+    "address": "Ulmer Strasse 300, 70327 Stuttgart, Germany",
+    "lon": 9.239000000000000,
+    "lat": 48.77450000000000
+  },
+  "contact": {
+    "phone": "+49.711.21729823",
+    "twitter": "@shackspace",
+    "email": "kontakt@shackspace.de",
+    "ml": "public@shackspace.de",
+    "irc": "irc://freenode.net/#shackspace"
+  },
+  "issue_report_channels": [
+    "email"
+  ],
+  "state": {
+    "icon": {
+      "open": "https://shackspace.de/sopen.gif",
+      "closed": "https://shackspace.de/sopen.gif"
+    },
+    "open": false,
+    "lastchange": 1656882435
+  },
+  "projects": [
+    "https://shackspace.de/wiki/doku.php?id=projekte",
+    "https://github.com/shackspace",
+    "https://git.shackspace.de"
+  ]
+}
