@@ -1,27 +1,51 @@
 package main
 
 import (
+	_ "embed"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log"
 	"net/http"
 	"os"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
 )
 
+//go:embed www/index.htm
+var index_htm_bytes string
+
+// file path to the space api template. must follow the space api format and will be provided
+// under `/v1/spaceapi`. The current open status will be updated before serving, the file is
+// not touched though.
+var space_api_path string
+
+// file path to a file that contains the api token for `/v1/space/notify-open`.
+// api requests will only be accepted for this path when the `auth_token` query is
+// this files content.
+// NOTE: Leading and trailing whitespace will be removed from the file contents.
+var auth_token_path string
+
+// file path to a file that contains the time stamp of the last sent status update.
+// NOTE: This file will be updated with each successful request.
+var status_db_path string
+
 func main() {
-	// make sure we haven't accidently seen the alive ping yet
-	last_portal_contact = time.Now().Add(-2 * portal_contact_timeout)
+	err := parseCli()
+	if err != nil {
+		log.Fatal("could not parse command line: ", err)
+		return
+	}
 
 	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
-		http.ServeFile(w, r, "www/index.htm")
+		fmt.Fprint(w, index_htm_bytes)
 	})
 
 	http.HandleFunc("/v1/space", displaySpaceStatus)
 	http.HandleFunc("/v1/online", displayShacklesStatus)
-	http.HandleFunc("/v1/plena/next", displayNotImplementedYet)
+	http.HandleFunc("/v1/plena/next", displayNextPlenum)
 	// http.HandleFunc("/v1/plena/next?redirect - get redirected directly to the newest wiki page
 	http.HandleFunc("/v1/spaceapi", displaySpaceApi)
 	http.HandleFunc("/v1/stats/portal", displayNotImplementedYet)
@@ -29,6 +53,70 @@ func main() {
 	http.HandleFunc("/v1/space/notify-open", handleNotifyOpen)
 
 	log.Fatal(http.ListenAndServe(":8081", nil))
+}
+
+// parses the command line arguments and initializes the global variables.
+// will return an error if anything went wrong.
+func parseCli() error {
+	argv := os.Args
+
+	if len(argv) < 4 {
+		return errors.New("requires arguments\nusage: api <space_api_def> <api_token> <status db>")
+	}
+
+	space_api_path = argv[1]
+	auth_token_path = argv[2]
+	status_db_path = argv[3]
+
+	_, err := os.ReadFile(space_api_path)
+	if err != nil {
+		log.Fatal("could not open space api file")
+		return err
+	}
+
+	_, err = os.ReadFile(auth_token_path)
+	if err != nil {
+		log.Fatal("could not open auth token path")
+		return err
+	}
+
+	// initialize last time stamp from status path
+	init_timestamp, err := os.ReadFile(status_db_path)
+	if errors.Is(err, os.ErrNotExist) {
+		_ = defaultInitalizeStatusDb()
+	} else if err == nil {
+
+		intval, err := strconv.ParseInt(string(init_timestamp), 10, 64)
+		if err == nil {
+			// make sure we haven't accidently seen the alive ping yet.
+			last_portal_contact = time.Unix(intval, 0)
+		} else {
+			log.Fatal("failed to read status db, please make sure it's readable and contains a valid unix timestamp!")
+			return err
+		}
+
+	} else {
+		log.Fatal("could not open status db path")
+		return err
+	}
+
+	return nil
+}
+
+func defaultInitalizeStatusDb() error {
+	// make sure we haven't accidently seen the alive ping yet.
+	last_portal_contact = time.Now().Add(-2 * portal_contact_timeout)
+
+	return writeStatusDb()
+}
+
+func writeStatusDb() error {
+	err := os.WriteFile(status_db_path, []byte(strconv.FormatInt(last_portal_contact.Unix(), 10)), 0o666)
+	if err != nil {
+		log.Fatalln("Failed to write status db: ", err)
+		return err
+	}
+	return nil
 }
 
 var mutex = &sync.Mutex{}
@@ -50,6 +138,9 @@ func notifyShackOpen() {
 		last_portal_state_change = time.Now()
 	}
 	last_portal_contact = time.Now()
+
+	_ = writeStatusDb()
+
 	mutex.Unlock()
 }
 
@@ -63,7 +154,7 @@ func getStateChangeTime() time.Time {
 }
 
 func handleNotifyOpen(w http.ResponseWriter, r *http.Request) {
-	api_key, err := os.ReadFile("www/auth-token.txt")
+	api_key, err := os.ReadFile(auth_token_path)
 	if err != nil {
 		log.Fatalln("Failed to load api auth token:", err)
 		w.WriteHeader(http.StatusInternalServerError)
@@ -164,7 +255,7 @@ func displaySpaceApi(w http.ResponseWriter, r *http.Request) {
 		Projects []string `json:"projects"`
 	}
 
-	json_string, err := os.ReadFile("www/space-api.json")
+	json_string, err := os.ReadFile(space_api_path)
 	if err != nil {
 		log.Fatalln("Failed to load space api data:", err)
 		w.WriteHeader(http.StatusInternalServerError)
@@ -185,6 +276,68 @@ func displaySpaceApi(w http.ResponseWriter, r *http.Request) {
 
 	response.State.Open = isShackOpen()
 	response.State.Lastchange = int(getStateChangeTime().Unix()) // TODO: This must be better documented
+
+	serveJsonString(w, response)
+}
+
+// Computes the date of the Plenum for the week `timestamp` is in.
+// Returns the start of that day.
+func computePlenumForWeek(timestamp time.Time) time.Time {
+	day := time.Date(timestamp.Year(), timestamp.Month(), timestamp.Day(), 0, 0, 0, 0, timestamp.Location())
+
+	start_of_week := day.Add(time.Duration(-24 * int64(time.Hour) * int64(day.Weekday())))
+
+	_, week := timestamp.ISOWeek()
+
+	var weekday time.Weekday
+	if week%2 == 0 {
+		weekday = time.Thursday
+	} else {
+		weekday = time.Wednesday
+	}
+
+	plenum_date := start_of_week.Add(time.Duration(24 * int64(time.Hour) * int64(weekday)))
+
+	return plenum_date
+}
+
+func displayNextPlenum(w http.ResponseWriter, r *http.Request) {
+	type PlenumInfo struct {
+		Date    time.Time `json:"date"`
+		FromNow string    `json:"fromNow"`
+		URL     string    `json:"url"`
+	}
+
+	now := time.Now().Local()
+
+	plenum_date := computePlenumForWeek(now)
+
+	// If we already missed the plenum this week,
+	// we have to provide the date for next week.
+	if plenum_date.Before(now) {
+		plenum_date.Add(7 * 24 * time.Hour)
+		plenum_date = computePlenumForWeek(plenum_date)
+	}
+
+	// adjust this to configure the plenum time!
+	plenum_date.Add(19 * time.Hour)
+
+	response := PlenumInfo{
+		Date:    plenum_date,
+		FromNow: "soooooon",
+		URL:     fmt.Sprintf("https://wiki.shackspace.de/plenum/%04d-%02d-%02d", plenum_date.Year(), plenum_date.Month(), plenum_date.Day()),
+	}
+
+	if r.URL.Query().Has("redirect") {
+		w.Header().Add("Location", response.URL)
+		w.Header().Add("Content-Type", "text/html; charset=utf-8")
+
+		w.WriteHeader(http.StatusFound)
+
+		fmt.Fprintf(w, "Redirecting to <a href=\"%s\">%s</a>.", response.URL, response.URL)
+
+		return
+	}
 
 	serveJsonString(w, response)
 }
