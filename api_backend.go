@@ -32,6 +32,8 @@ var auth_token_path string
 // NOTE: This file will be updated with each successful request.
 var status_db_path string
 
+var http_binding string = "127.0.0.1:8910"
+
 func main() {
 	err := parseCli()
 	if err != nil {
@@ -52,7 +54,7 @@ func main() {
 
 	http.HandleFunc("/v1/space/notify-open", handleNotifyOpen)
 
-	log.Fatal(http.ListenAndServe(":8081", nil))
+	log.Fatal(http.ListenAndServe(http_binding, nil))
 }
 
 // parses the command line arguments and initializes the global variables.
@@ -60,7 +62,7 @@ func main() {
 func parseCli() error {
 	argv := os.Args
 
-	if len(argv) < 4 {
+	if len(argv) < 4 || len(argv) > 5 {
 		return errors.New("requires arguments\nusage: api <space_api_def> <api_token> <status db>")
 	}
 
@@ -98,6 +100,10 @@ func parseCli() error {
 	} else {
 		log.Fatal("could not open status db path")
 		return err
+	}
+
+	if len(argv) > 4 {
+		http_binding = argv[4]
 	}
 
 	return nil
