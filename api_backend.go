@@ -32,7 +32,11 @@ var auth_token_path string
 // NOTE: This file will be updated with each successful request.
 var status_db_path string
 
+// the default http binding for the api.
 var http_binding string = "127.0.0.1:8910"
+
+// stores the timeout after when the space is considered closed
+const portal_contact_timeout = 5 * time.Minute
 
 func main() {
 	err := parseCli()
@@ -127,9 +131,8 @@ func writeStatusDb() error {
 
 var mutex = &sync.Mutex{}
 
-var last_portal_state_change time.Time         // stores the time for the last state change
-var last_portal_contact time.Time              // stores the time when we've last seen the space signal itself "open"
-const portal_contact_timeout = 5 * time.Minute // stores the timeout after when the space is considered closed
+var last_portal_state_change time.Time // stores the time for the last state change
+var last_portal_contact time.Time      // stores the time when we've last seen the space signal itself "open"
 
 func isShackOpen() bool {
 	// lock access to shared state
