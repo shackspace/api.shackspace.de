@@ -38,6 +38,10 @@ var http_binding string = "127.0.0.1:8910"
 // stores the timeout after when the space is considered closed
 const portal_contact_timeout = 5 * time.Minute
 
+// Wall clock time when the plenum takes place. Adjust this when
+// a new time is set.
+const plenum_time time.Duration = 19*time.Hour + 0*time.Minute
+
 func main() {
 	err := parseCli()
 	if err != nil {
@@ -328,25 +332,24 @@ func displayNextPlenum(w http.ResponseWriter, r *http.Request) {
 	now := time.Now().Local()
 
 	plenum_date := computePlenumForWeek(now)
-	plenum_time := plenum_date.Add(19 * time.Hour)
+	plenum_date_time := plenum_date.Add(plenum_time)
 
 	// If we already missed the plenum this week,
 	// we have to provide the date for next week.
-	if plenum_time.Before(now) {
+	if plenum_date_time.Before(now) {
 		plenum_date = computePlenumForWeek(plenum_date.Add(7 * 24 * time.Hour))
-		plenum_time = plenum_date.Add(19 * time.Hour)
+		plenum_date_time = plenum_date.Add(plenum_time)
 	}
 
 	response := PlenumInfo{
-		// adjust this to configure the plenum time!
-		Date:    plenum_time,
+		Date:    plenum_date_time,
 		FromNow: "soooooon",
 		URL:     fmt.Sprintf("https://wiki.shackspace.de/plenum/%04d-%02d-%02d", plenum_date.Year(), plenum_date.Month(), plenum_date.Day()),
 	}
 
 	const Day = 24 * time.Hour
 
-	time_delta_abs := plenum_time.Sub(now)
+	time_delta_abs := plenum_date_time.Sub(now)
 	time_delta_day := plenum_date.Sub(now)
 
 	// log.Println("time_delta_abs = ", time_delta_abs)
