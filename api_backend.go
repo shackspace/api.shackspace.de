@@ -46,6 +46,7 @@ func main() {
 	}
 
 	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Add("Content-Type", "text/html; charset=utf-8")
 		fmt.Fprint(w, index_htm_bytes)
 	})
 
@@ -172,6 +173,7 @@ func handleNotifyOpen(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	w.Header().Add("Content-Type", "text/plain")
 	if r.URL.Query().Get("auth_token") == strings.TrimSpace(string(api_key)) {
 		notifyShackOpen()
 		fmt.Fprint(w, "ok")
@@ -187,6 +189,10 @@ func displayNotImplementedYet(w http.ResponseWriter, r *http.Request) {
 }
 
 func serveJsonString(w http.ResponseWriter, value any) {
+
+	w.Header().Add("Content-Type", "application/json; charset=utf-8")
+	w.Header().Add("Access-Control-Allow-Methods", "GET,HEAD,PUT,POST,DELETE")
+	w.Header().Add("Access-Control-Allow-Origin", "*")
 
 	json_string, err := json.Marshal(value)
 	if err == nil {
