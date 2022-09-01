@@ -302,16 +302,18 @@ func computePlenumForWeek(timestamp time.Time) time.Time {
 
 	start_of_week := day.Add(time.Duration(-24 * int64(time.Hour) * int64(day.Weekday())))
 
-	_, week := timestamp.ISOWeek()
+	_, week := start_of_week.ISOWeek()
 
 	var weekday time.Weekday
-	if week%2 == 0 {
+	if week%2 != 0 {
 		weekday = time.Thursday
 	} else {
 		weekday = time.Wednesday
 	}
 
 	plenum_date := start_of_week.Add(time.Duration(24 * int64(time.Hour) * int64(weekday)))
+
+	// log.Println(timestamp, "  -  ", day, "  -  ", start_of_week, "  -  ", plenum_date)
 
 	return plenum_date
 }
@@ -326,21 +328,56 @@ func displayNextPlenum(w http.ResponseWriter, r *http.Request) {
 	now := time.Now().Local()
 
 	plenum_date := computePlenumForWeek(now)
+	plenum_time := plenum_date.Add(19 * time.Hour)
 
 	// If we already missed the plenum this week,
 	// we have to provide the date for next week.
-	if plenum_date.Before(now) {
-		plenum_date.Add(7 * 24 * time.Hour)
-		plenum_date = computePlenumForWeek(plenum_date)
+	if plenum_time.Before(now) {
+		plenum_date = computePlenumForWeek(plenum_date.Add(7 * 24 * time.Hour))
+		plenum_time = plenum_date.Add(19 * time.Hour)
 	}
 
-	// adjust this to configure the plenum time!
-	plenum_date.Add(19 * time.Hour)
-
 	response := PlenumInfo{
-		Date:    plenum_date,
+		// adjust this to configure the plenum time!
+		Date:    plenum_time,
 		FromNow: "soooooon",
 		URL:     fmt.Sprintf("https://wiki.shackspace.de/plenum/%04d-%02d-%02d", plenum_date.Year(), plenum_date.Month(), plenum_date.Day()),
+	}
+
+	const Day = 24 * time.Hour
+
+	time_delta_abs := plenum_time.Sub(now)
+	time_delta_day := plenum_date.Sub(now)
+
+	// log.Println("time_delta_abs = ", time_delta_abs)
+	// log.Println("time_delta_day = ", time_delta_day)
+
+	if time_delta_day >= 7*Day {
+		response.FromNow = "next week"
+	} else if time_delta_day >= 6*Day {
+		response.FromNow = "in a week"
+	} else if time_delta_day >= 5*Day {
+		response.FromNow = "in 6 days"
+	} else if time_delta_day >= 4*Day {
+		response.FromNow = "in 5 days"
+	} else if time_delta_day >= 3*Day {
+		response.FromNow = "in 4 days"
+	} else if time_delta_day >= 2*Day {
+		response.FromNow = "in 3 days"
+	} else if time_delta_day >= 1*Day {
+		response.FromNow = "in 2 days"
+	} else if time_delta_day >= 0*Day {
+		response.FromNow = "tomorrow"
+	} else if time_delta_abs < 15*time.Minute {
+		response.FromNow = "in less than 15 minutes"
+	} else if time_delta_abs < 30*time.Minute {
+		response.FromNow = "in less than 30 minutes"
+	} else if time_delta_abs < 1*time.Hour {
+		response.FromNow = "in less than one hour"
+	} else if time_delta_abs < 3*time.Hour {
+		response.FromNow = "in less than three hours"
+	} else {
+		response.FromNow = "today"
 	}
 
 	if r.URL.Query().Has("redirect") {
