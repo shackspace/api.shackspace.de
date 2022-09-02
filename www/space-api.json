@@ -17,7 +17,7 @@
     "twitter": "@shackspace",
     "email": "kontakt@shackspace.de",
     "ml": "public@shackspace.de",
-    "irc": "irc://freenode.net/#shackspace"
+    "irc": "irc://irc.libera.chat:6697/shackspace"
   },
   "issue_report_channels": [
     "email"
